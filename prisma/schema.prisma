@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+}
+
+model Student {
+  id           String    @id @default(cuid())
+  name         String
+  phone        String    @default("")
+  loginPhone   String    @unique
+  passwordHash String
+  passwordSalt String
+  createdAt    DateTime  @default(now())
+
+  submissions    Submission[]
+  payments       Payment[]
+  assignedVideos StudentContent[]
+  workshops      StudentWorkshop[]
+}
+
+model Submission {
+  id        String  @id @default(cuid())
+  title     String
+  notes     String  @default("")
+  date      String
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id          String  @id @default(cuid())
+  amount      Float
+  description String  @default("")
+  date        String
+  status      String  @default("paid")
+  studentId   String
+  student     Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+model ContentItem {
+  id          String   @id @default(cuid())
+  title       String
+  type        String
+  videoType   String
+  url         String
+  embedId     String
+  description String   @default("")
+  createdAt   DateTime @default(now())
+
+  assignedTo StudentContent[]
+}
+
+model StudentContent {
+  studentId String
+  contentId String
+  student   Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  content   ContentItem @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, contentId])
+}
+
+model Workshop {
+  id          String @id @default(cuid())
+  title       String
+  date        String
+  time        String @default("")
+  venue       String @default("")
+  description String @default("")
+  slots       Int    @default(0)
+  price       String @default("")
+
+  students StudentWorkshop[]
+}
+
+model StudentWorkshop {
+  studentId  String
+  workshopId String
+  type       String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  workshop   Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, workshopId, type])
+}
+
+model GalleryItem {
+  id      String @id @default(cuid())
+  type    String
+  url     String
+  embedId String @default("")
+  title   String
+}
+
+model Event {
+  id       String  @id @default(cuid())
+  date     String  @unique
+  name     String
+  moveable Boolean @default(false)
+}
+
+model StudentReminder {
+  id           String  @id @default(cuid())
+  studentName  String
+  email        String  @default("")
+  phone        String  @default("")
+  amount       Float   @default(0)
+  dueDate      String
+  paid         Boolean @default(false)
+  lastReminded String?
+}
