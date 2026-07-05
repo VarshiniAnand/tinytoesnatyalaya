@@ -66,7 +66,8 @@ interface StudentRecord {
 interface ContentItem {
   id: string
   title: string
-  type: 'self-paced' | 'class-ref'
+  tab: string
+  type: string
   videoType: 'youtube' | 'instagram'
   url: string
   embedId: string
@@ -82,6 +83,12 @@ const MONTHS = [
 function formatDate(dateStr: string) {
   const d = new Date(dateStr + 'T00:00:00')
   return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
+}
+
+function categoryLabel(type: string): string {
+  if (type === 'self-paced') return 'Self-Paced Learning'
+  if (type === 'class-ref') return 'Class Reference'
+  return type.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
 const inputCls =
@@ -149,10 +156,15 @@ export default function AdminPage() {
   const [content, setContent] = useState<ContentItem[]>([])
   const [loadingCT, setLoadingCT] = useState(true)
   const [ctTitle, setCtTitle] = useState('')
-  const [ctType, setCtType] = useState<'self-paced' | 'class-ref'>('self-paced')
+  const [ctTab, setCtTab] = useState<string>('Learning')
+  const [ctIsNewTab, setCtIsNewTab] = useState(false)
+  const [ctNewTab, setCtNewTab] = useState('')
+  const [ctType, setCtType] = useState<string>('self-paced')
   const [ctVideoType, setCtVideoType] = useState<'youtube' | 'instagram'>('youtube')
   const [ctUrl, setCtUrl] = useState('')
   const [ctDesc, setCtDesc] = useState('')
+  const [ctIsNewCategory, setCtIsNewCategory] = useState(false)
+  const [ctNewCategory, setCtNewCategory] = useState('')
   const [assigningItem, setAssigningItem] = useState<ContentItem | null>(null)
 
   useEffect(() => {
@@ -524,13 +536,19 @@ export default function AdminPage() {
 
   async function handleAddContent(e: FormEvent) {
     e.preventDefault(); setSaving(true); setError('')
+    const tabToUse = ctIsNewTab ? ctNewTab.trim() : ctTab
+    const typeToUse = ctIsNewCategory ? ctNewCategory.trim() : ctType
+    if (!tabToUse) { setError('Tab name is required.'); setSaving(false); return }
+    if (!typeToUse) { setError('Category name is required.'); setSaving(false); return }
     try {
       const res = await fetch('/api/admin/content', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: ctTitle.trim(), type: ctType, videoType: ctVideoType, url: ctUrl.trim(), description: ctDesc.trim() }),
+        body: JSON.stringify({ title: ctTitle.trim(), tab: tabToUse, type: typeToUse, videoType: ctVideoType, url: ctUrl.trim(), description: ctDesc.trim() }),
       })
       if (!res.ok) { const d = (await res.json()) as { error?: string }; throw new Error(d.error ?? 'Failed to add content.') }
       setCtTitle(''); setCtUrl(''); setCtDesc('')
+      setCtIsNewTab(false); setCtNewTab(''); setCtTab(tabToUse)
+      setCtIsNewCategory(false); setCtNewCategory(''); setCtType(typeToUse)
       await loadContent(); flash('Video added to content library.')
     } catch (err) { setError(err instanceof Error ? err.message : 'Failed to add content.') } finally { setSaving(false) }
   }
@@ -1234,23 +1252,33 @@ export default function AdminPage() {
                           <p className="text-stone-400 text-xs text-center py-4">No content yet. Add videos in the Content Library tab.</p>
                         ) : (
                           <div className="space-y-4">
-                            {(['self-paced', 'class-ref'] as const).map(type => {
-                              const items = content.filter(c => c.type === type)
-                              if (items.length === 0) return null
+                            {Array.from(new Set(content.map(c => c.tab))).map(tabName => {
+                              const tabItems = content.filter(c => c.tab === tabName)
                               return (
-                                <div key={type}>
-                                  <p className="text-xs font-bold text-stone-500 uppercase tracking-wide mb-2">{type === 'self-paced' ? 'Self-Paced Learning' : 'Class Reference'}</p>
-                                  <div className="space-y-1.5">
-                                    {items.map(item => {
-                                      const assigned = selectedStudent.assignedVideoIds.includes(item.id)
+                                <div key={tabName}>
+                                  <p className="text-xs font-bold text-maroon uppercase tracking-widest mb-2 border-b border-stone-100 pb-1">{tabName}</p>
+                                  <div className="space-y-3 pl-1">
+                                    {Array.from(new Set(tabItems.map(c => c.type))).map(type => {
+                                      const items = tabItems.filter(c => c.type === type)
+                                      if (items.length === 0) return null
                                       return (
-                                        <div key={item.id} onClick={() => studentPatch({ action: 'toggleVideo', studentId: selectedStudent.id, videoId: item.id })}
-                                          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition cursor-pointer ${assigned ? 'border-[#800000]/30 bg-[#800000]/5' : 'border-stone-100 hover:border-stone-200'}`}>
-                                          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition ${assigned ? 'bg-[#800000] border-[#800000]' : 'border-stone-300'}`}>
-                                            {assigned && <svg viewBox="0 0 12 10" fill="none" className="w-3 h-3"><path d="M1 5l3.5 3.5L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                                        <div key={type}>
+                                          <p className="text-xs font-bold text-stone-500 uppercase tracking-wide mb-2">{categoryLabel(type)}</p>
+                                          <div className="space-y-1.5">
+                                            {items.map(item => {
+                                              const assigned = selectedStudent.assignedVideoIds.includes(item.id)
+                                              return (
+                                                <div key={item.id} onClick={() => studentPatch({ action: 'toggleVideo', studentId: selectedStudent.id, videoId: item.id })}
+                                                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition cursor-pointer ${assigned ? 'border-[#800000]/30 bg-[#800000]/5' : 'border-stone-100 hover:border-stone-200'}`}>
+                                                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition ${assigned ? 'bg-[#800000] border-[#800000]' : 'border-stone-300'}`}>
+                                                    {assigned && <svg viewBox="0 0 12 10" fill="none" className="w-3 h-3"><path d="M1 5l3.5 3.5L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                                                  </div>
+                                                  <div className="flex-1 min-w-0"><p className="text-sm font-medium text-stone-800 truncate">{item.title}</p><p className="text-xs text-stone-400">{item.videoType}</p></div>
+                                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${assigned ? 'bg-[#800000] text-white' : 'bg-stone-100 text-stone-500'}`}>{assigned ? 'Assigned' : 'Unassigned'}</span>
+                                                </div>
+                                              )
+                                            })}
                                           </div>
-                                          <div className="flex-1 min-w-0"><p className="text-sm font-medium text-stone-800 truncate">{item.title}</p><p className="text-xs text-stone-400">{item.videoType}</p></div>
-                                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${assigned ? 'bg-[#800000] text-white' : 'bg-stone-100 text-stone-500'}`}>{assigned ? 'Assigned' : 'Unassigned'}</span>
                                         </div>
                                       )
                                     })}
@@ -1327,7 +1355,36 @@ export default function AdminPage() {
               <form onSubmit={handleAddContent} className="space-y-3">
                 <div className="flex flex-wrap gap-3">
                   <div className="flex-[2] min-w-[200px]"><label className={labelCls}>Title</label><input type="text" required maxLength={100} value={ctTitle} onChange={e => setCtTitle(e.target.value)} placeholder="e.g. Namaskaram – Step by Step" className={inputCls} /></div>
-                  <div className="min-w-[160px]"><label className={labelCls}>Category</label><select value={ctType} onChange={e => setCtType(e.target.value as 'self-paced' | 'class-ref')} className={inputCls}><option value="self-paced">Self-Paced Learning</option><option value="class-ref">Class Reference</option></select></div>
+                  <div className="min-w-[140px]"><label className={labelCls}>Tab</label>
+                    {ctIsNewTab ? (
+                      <div className="flex gap-1 items-center">
+                        <input type="text" autoFocus required maxLength={50} value={ctNewTab} onChange={e => setCtNewTab(e.target.value)} placeholder="New tab name…" className={inputCls + ' flex-1'} />
+                        <button type="button" onClick={() => { setCtIsNewTab(false); setCtNewTab('') }} className="text-stone-400 hover:text-stone-600 px-1 text-lg leading-none" title="Cancel">✕</button>
+                      </div>
+                    ) : (
+                      <select value={ctTab} onChange={e => { if (e.target.value === '__new__') { setCtIsNewTab(true); setCtNewTab('') } else { setCtTab(e.target.value) } }} className={inputCls}>
+                        {Array.from(new Set(['Learning', ...content.map(c => c.tab)])).map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                        <option value="__new__">＋ Create new tab…</option>
+                      </select>
+                    )}
+                  </div>
+                  <div className="min-w-[160px]"><label className={labelCls}>Category</label>
+                    {ctIsNewCategory ? (
+                      <div className="flex gap-1 items-center">
+                        <input type="text" autoFocus required maxLength={50} value={ctNewCategory} onChange={e => setCtNewCategory(e.target.value)} placeholder="New category name…" className={inputCls + ' flex-1'} />
+                        <button type="button" onClick={() => { setCtIsNewCategory(false); setCtNewCategory('') }} className="text-stone-400 hover:text-stone-600 px-1 text-lg leading-none" title="Cancel">✕</button>
+                      </div>
+                    ) : (
+                      <select value={ctType} onChange={e => { if (e.target.value === '__new__') { setCtIsNewCategory(true); setCtNewCategory('') } else { setCtType(e.target.value) } }} className={inputCls}>
+                        {Array.from(new Set(['self-paced', 'class-ref', ...content.map(c => c.type)])).map(cat => (
+                          <option key={cat} value={cat}>{categoryLabel(cat)}</option>
+                        ))}
+                        <option value="__new__">＋ Create new category…</option>
+                      </select>
+                    )}
+                  </div>
                   <div className="min-w-[140px]"><label className={labelCls}>Platform</label><select value={ctVideoType} onChange={e => setCtVideoType(e.target.value as 'youtube' | 'instagram')} className={inputCls}><option value="youtube">YouTube</option><option value="instagram">Instagram</option></select></div>
                 </div>
                 <div className="flex flex-wrap gap-3 items-end">
@@ -1345,67 +1402,77 @@ export default function AdminPage() {
               ) : content.length === 0 ? (
                 <p className="text-stone-400 text-sm text-center py-6">No videos yet. Add one above.</p>
               ) : (
-                <div className="space-y-4">
-                  {(['self-paced', 'class-ref'] as const).map(type => {
-                    const items = content.filter(c => c.type === type)
-                    if (items.length === 0) return null
+                <div className="space-y-6">
+                  {Array.from(new Set(content.map(c => c.tab))).map(tabName => {
+                    const tabItems = content.filter(c => c.tab === tabName)
                     return (
-                      <div key={type}>
-                        <p className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">{type === 'self-paced' ? 'Self-Paced Learning' : 'Class Reference'}</p>
-                        <div className="space-y-2">
-                          {items.map(item => (
-                            <div key={item.id} className="border border-stone-100 rounded-xl overflow-hidden group">
-                              <div className="flex items-center gap-3 p-3">
-                                {item.videoType === 'youtube' ? (
-                                  <div className="w-16 h-10 bg-stone-900 rounded-lg overflow-hidden shrink-0">
-                                    <img src={`https://img.youtube.com/vi/${item.embedId}/default.jpg`} alt={item.title} className="w-full h-full object-cover" />
-                                  </div>
-                                ) : (
-                                  <div className="w-16 h-10 bg-gradient-to-br from-purple-100 to-pink-100 rounded-lg flex items-center justify-center shrink-0">
-                                    <span className="text-xs font-bold text-purple-600">IG</span>
-                                  </div>
-                                )}
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-semibold text-stone-800 truncate">{item.title}</p>
-                                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${item.type === 'self-paced' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>{item.type === 'self-paced' ? 'Self-Paced' : 'Class Ref'}</span>
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${item.videoType === 'youtube' ? 'bg-red-50 text-red-600' : 'bg-pink-50 text-pink-600'}`}>{item.videoType}</span>
-                                    {item.description && <span className="text-xs text-stone-400 truncate max-w-[180px]">{item.description}</span>}
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-3 shrink-0">
-                                  <button onClick={() => setAssigningItem(assigningItem?.id === item.id ? null : item)} className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition ${assigningItem?.id === item.id ? 'bg-[#800000] text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}>Assign</button>
-                                  <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-xs text-stone-400 hover:text-maroon transition">View →</a>
-                                  <button onClick={() => handleDeleteContent(item.id)} className="text-xs text-red-400 hover:text-red-600 transition opacity-0 group-hover:opacity-100">Delete</button>
+                      <div key={tabName}>
+                        <p className="text-xs font-bold text-maroon uppercase tracking-widest mb-3 border-b border-stone-100 pb-1.5">{tabName}</p>
+                        <div className="space-y-4 pl-1">
+                          {Array.from(new Set(tabItems.map(c => c.type))).map(type => {
+                            const items = tabItems.filter(c => c.type === type)
+                            if (items.length === 0) return null
+                            return (
+                              <div key={type}>
+                                <p className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">{categoryLabel(type)}</p>
+                                <div className="space-y-2">
+                                  {items.map(item => (
+                                    <div key={item.id} className="border border-stone-100 rounded-xl overflow-hidden group">
+                                      <div className="flex items-center gap-3 p-3">
+                                        {item.videoType === 'youtube' ? (
+                                          <div className="w-16 h-10 bg-stone-900 rounded-lg overflow-hidden shrink-0">
+                                            <img src={`https://img.youtube.com/vi/${item.embedId}/default.jpg`} alt={item.title} className="w-full h-full object-cover" />
+                                          </div>
+                                        ) : (
+                                          <div className="w-16 h-10 bg-gradient-to-br from-purple-100 to-pink-100 rounded-lg flex items-center justify-center shrink-0">
+                                            <span className="text-xs font-bold text-purple-600">IG</span>
+                                          </div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-semibold text-stone-800 truncate">{item.title}</p>
+                                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${item.type === 'self-paced' ? 'bg-blue-50 text-blue-600' : item.type === 'class-ref' ? 'bg-purple-50 text-purple-600' : 'bg-teal-50 text-teal-600'}`}>{categoryLabel(item.type)}</span>
+                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${item.videoType === 'youtube' ? 'bg-red-50 text-red-600' : 'bg-pink-50 text-pink-600'}`}>{item.videoType}</span>
+                                            {item.description && <span className="text-xs text-stone-400 truncate max-w-[180px]">{item.description}</span>}
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 shrink-0">
+                                          <button onClick={() => setAssigningItem(assigningItem?.id === item.id ? null : item)} className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition ${assigningItem?.id === item.id ? 'bg-[#800000] text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}>Assign</button>
+                                          <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-xs text-stone-400 hover:text-maroon transition">View →</a>
+                                          <button onClick={() => handleDeleteContent(item.id)} className="text-xs text-red-400 hover:text-red-600 transition opacity-0 group-hover:opacity-100">Delete</button>
+                                        </div>
+                                      </div>
+
+                                      {/* Assign panel */}
+                                      {assigningItem?.id === item.id && (
+                                        <div className="border-t border-stone-100 bg-stone-50/80 p-3">
+                                          <p className="text-xs font-bold text-stone-500 mb-2">Push to students · click to toggle access</p>
+                                          {students.length === 0 ? (
+                                            <p className="text-xs text-stone-400">No students yet.</p>
+                                          ) : (
+                                            <div className="flex flex-wrap gap-2">
+                                              {students.map(s => {
+                                                const assigned = s.assignedVideoIds.includes(item.id)
+                                                return (
+                                                  <button key={s.id} onClick={() => handleToggleContentStudent(item.id, s.id)} disabled={saving}
+                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition ${assigned ? 'bg-[#800000] text-white border-[#800000]' : 'bg-white text-stone-600 border-stone-200 hover:border-stone-300'}`}>
+                                                    <span className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${assigned ? 'bg-white border-white' : 'border-current'}`}>
+                                                      {assigned && <svg viewBox="0 0 8 8" fill="none" className="w-2 h-2"><path d="M1 4l2 2 4-4" stroke="#800000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                                                    </span>
+                                                    {s.name}
+                                                  </button>
+                                                )
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
                                 </div>
                               </div>
-
-                              {/* Assign panel */}
-                              {assigningItem?.id === item.id && (
-                                <div className="border-t border-stone-100 bg-stone-50/80 p-3">
-                                  <p className="text-xs font-bold text-stone-500 mb-2">Push to students · click to toggle access</p>
-                                  {students.length === 0 ? (
-                                    <p className="text-xs text-stone-400">No students yet.</p>
-                                  ) : (
-                                    <div className="flex flex-wrap gap-2">
-                                      {students.map(s => {
-                                        const assigned = s.assignedVideoIds.includes(item.id)
-                                        return (
-                                          <button key={s.id} onClick={() => handleToggleContentStudent(item.id, s.id)} disabled={saving}
-                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition ${assigned ? 'bg-[#800000] text-white border-[#800000]' : 'bg-white text-stone-600 border-stone-200 hover:border-stone-300'}`}>
-                                            <span className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${assigned ? 'bg-white border-white' : 'border-current'}`}>
-                                              {assigned && <svg viewBox="0 0 8 8" fill="none" className="w-2 h-2"><path d="M1 4l2 2 4-4" stroke="#800000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                                            </span>
-                                            {s.name}
-                                          </button>
-                                        )
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </div>
                     )

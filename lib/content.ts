@@ -5,7 +5,8 @@ import { prisma } from '@/lib/prisma'
 export interface ContentItem {
   id: string
   title: string
-  type: 'self-paced' | 'class-ref'
+  tab: string
+  type: string
   videoType: 'youtube' | 'instagram'
   url: string
   embedId: string
@@ -31,7 +32,8 @@ export async function readContent(): Promise<ContentItem[]> {
     const items = await prisma.contentItem.findMany({ orderBy: { createdAt: 'desc' } })
     return items.map(item => ({
       ...item,
-      type: item.type as 'self-paced' | 'class-ref',
+      tab: item.tab,
+      type: item.type,
       videoType: item.videoType as 'youtube' | 'instagram',
       createdAt: item.createdAt.toISOString(),
     }))

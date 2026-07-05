@@ -44,6 +44,7 @@ model Payment {
 model ContentItem {
   id          String   @id @default(cuid())
   title       String
+  tab         String   @default("Learning")
   type        String
   videoType   String
   url         String

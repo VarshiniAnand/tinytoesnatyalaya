@@ -25,12 +25,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  const { title, type, videoType, url, description } = (body as Record<string, unknown>) ?? {}
+  const { title, tab, type, videoType, url, description } = (body as Record<string, unknown>) ?? {}
 
   if (typeof title !== 'string' || !title.trim())
     return NextResponse.json({ error: 'Title is required' }, { status: 400 })
-  if (type !== 'self-paced' && type !== 'class-ref')
-    return NextResponse.json({ error: 'Type must be self-paced or class-ref' }, { status: 400 })
+  if (typeof tab !== 'string' || !tab.trim() || tab.trim().length > 50)
+    return NextResponse.json({ error: 'Tab is required (max 50 characters)' }, { status: 400 })
+  if (typeof type !== 'string' || !type.trim() || type.trim().length > 50)
+    return NextResponse.json({ error: 'Category is required (max 50 characters)' }, { status: 400 })
   if (videoType !== 'youtube' && videoType !== 'instagram')
     return NextResponse.json({ error: 'Video type must be youtube or instagram' }, { status: 400 })
   if (typeof url !== 'string' || !url.trim())
@@ -52,7 +54,8 @@ export async function POST(request: Request) {
     data: {
       id: crypto.randomUUID(),
       title: title.trim().slice(0, 100),
-      type,
+      tab: (tab as string).trim().slice(0, 50),
+      type: (type as string).trim().slice(0, 50),
       videoType,
       url: url.trim(),
       embedId,

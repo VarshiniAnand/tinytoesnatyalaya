@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
-type StudentTab = 'learning' | 'workshops' | 'payments' | 'submissions'
+type StudentTab = string
 
 interface ContentItem {
   id: string
   title: string
-  type: 'self-paced' | 'class-ref'
+  tab: string
+  type: string
   videoType: 'youtube' | 'instagram'
   url: string
   embedId: string
@@ -166,7 +167,7 @@ export default function StudentDashboard() {
   const router = useRouter()
   const [data, setData] = useState<StudentData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<StudentTab>('learning')
+  const [tab, setTab] = useState<StudentTab>('__workshops')
 
   useEffect(() => {
     void loadData()
@@ -177,7 +178,13 @@ export default function StudentDashboard() {
       const res = await fetch('/api/student/me')
       if (res.status === 401) { router.push('/student/login'); return }
       if (!res.ok) throw new Error()
-      setData((await res.json()) as StudentData)
+      const loaded = (await res.json()) as StudentData
+      setData(loaded)
+      if (loaded.assignedVideos.length > 0) {
+        setTab(loaded.assignedVideos[0].tab)
+      } else {
+        setTab('__workshops')
+      }
     } catch {
       router.push('/student/login')
     } finally {
@@ -200,14 +207,20 @@ export default function StudentDashboard() {
 
   if (!data) return null
 
-  const selfPaced = data.assignedVideos.filter(v => v.type === 'self-paced')
-  const classRef = data.assignedVideos.filter(v => v.type === 'class-ref')
+  // Derive unique video tabs in the order they first appear
+  const videoTabs = Array.from(new Set(data.assignedVideos.map(v => v.tab)))
 
-  const tabs: { id: StudentTab; label: string }[] = [
-    { id: 'learning', label: 'Learning' },
-    { id: 'workshops', label: 'Workshops' },
-    { id: 'payments', label: 'Payments' },
-    { id: 'submissions', label: 'Submissions' },
+  function categoryLabel(type: string): string {
+    if (type === 'self-paced') return 'Self-Paced Learning'
+    if (type === 'class-ref') return 'Class Reference'
+    return type.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  }
+
+  const tabs: { id: string; label: string }[] = [
+    ...videoTabs.map(t => ({ id: t, label: t })),
+    { id: '__workshops', label: 'Workshops' },
+    { id: '__payments', label: 'Payments' },
+    { id: '__submissions', label: 'Submissions' },
   ]
 
   return (
@@ -243,47 +256,29 @@ export default function StudentDashboard() {
           ))}
         </div>
 
-        {/* ══════════════ LEARNING ══════════════ */}
-        {tab === 'learning' && (
+        {/* ══════════════ DYNAMIC VIDEO TABS ══════════════ */}
+        {videoTabs.includes(tab) && (
           <div className="space-y-6">
-            {/* Self-paced Learning */}
-            <div className="glass-card rounded-2xl p-6">
-              <h2 className="font-bold text-maroon uppercase tracking-widest text-xs mb-1">
-                Self-Paced Learning
-              </h2>
-              <p className="text-stone-400 text-xs mb-4">Learn at your own pace</p>
-              {selfPaced.length === 0 ? (
-                <p className="text-stone-400 text-sm text-center py-8">
-                  No self-paced videos assigned yet.
-                </p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {selfPaced.map(v => <VideoCard key={v.id} item={v} />)}
+            {Array.from(new Set(data.assignedVideos.filter(v => v.tab === tab).map(v => v.type))).map(cat => {
+              const videos = data.assignedVideos.filter(v => v.tab === tab && v.type === cat)
+              return (
+                <div key={cat} className="glass-card rounded-2xl p-6">
+                  <h2 className="font-bold text-maroon uppercase tracking-widest text-xs mb-1">{categoryLabel(cat)}</h2>
+                  {videos.length === 0 ? (
+                    <p className="text-stone-400 text-sm text-center py-8">No videos assigned yet.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                      {videos.map(v => <VideoCard key={v.id} item={v} />)}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-
-            {/* Class Reference Videos */}
-            <div className="glass-card rounded-2xl p-6">
-              <h2 className="font-bold text-maroon uppercase tracking-widest text-xs mb-1">
-                Class Reference Videos
-              </h2>
-              <p className="text-stone-400 text-xs mb-4">Reference videos from your classes</p>
-              {classRef.length === 0 ? (
-                <p className="text-stone-400 text-sm text-center py-8">
-                  No class reference videos assigned yet.
-                </p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {classRef.map(v => <VideoCard key={v.id} item={v} />)}
-                </div>
-              )}
-            </div>
+              )
+            })}
           </div>
         )}
 
         {/* ══════════════ WORKSHOPS ══════════════ */}
-        {tab === 'workshops' && (
+        {tab === '__workshops' && (
           <div className="space-y-6">
             <div className="glass-card rounded-2xl p-6">
               <h2 className="font-bold text-maroon uppercase tracking-widest text-xs mb-1">
@@ -324,7 +319,7 @@ export default function StudentDashboard() {
         )}
 
         {/* ══════════════ PAYMENTS ══════════════ */}
-        {tab === 'payments' && (
+        {tab === '__payments' && (
           <div className="glass-card rounded-2xl p-6">
             <h2 className="font-bold text-maroon uppercase tracking-widest text-xs mb-1">
               Payment History
@@ -374,7 +369,7 @@ export default function StudentDashboard() {
         )}
 
         {/* ══════════════ SUBMISSIONS ══════════════ */}
-        {tab === 'submissions' && (
+        {tab === '__submissions' && (
           <div className="glass-card rounded-2xl p-6">
             <h2 className="font-bold text-maroon uppercase tracking-widest text-xs mb-1">
               Submissions
